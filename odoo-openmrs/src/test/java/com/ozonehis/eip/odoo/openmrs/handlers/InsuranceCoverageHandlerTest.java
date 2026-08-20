@@ -45,6 +45,7 @@ class InsuranceCoverageHandlerTest {
         mocksCloser = openMocks(this);
         insuranceCoverageHandler.setInsuranceAttributeName("Insurance Coverage Tier");
         insuranceCoverageHandler.setPlanNameTemplate("Insurance %d%%");
+        insuranceCoverageHandler.setConfiguredTiers("50,60,70,80,90,100");
     }
 
     @Test
