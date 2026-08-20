@@ -43,6 +43,8 @@ class InsuranceCoverageHandlerTest {
     @BeforeEach
     public void setup() {
         mocksCloser = openMocks(this);
+        insuranceCoverageHandler.setInsuranceAttributeName("Insurance Coverage Tier");
+        insuranceCoverageHandler.setPlanNameTemplate("Insurance %d%%");
     }
 
     @Test

@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.openMocks;
 import static org.openmrs.eip.fhir.Constants.HEADER_FHIR_EVENT_TYPE;
 
+import com.ozonehis.eip.odoo.openmrs.handlers.odoo.InsuranceCoverageHandler;
 import com.ozonehis.eip.odoo.openmrs.handlers.odoo.PartnerHandler;
 import com.ozonehis.eip.odoo.openmrs.mapper.odoo.PartnerMapper;
 import com.ozonehis.eip.odoo.openmrs.model.Partner;
@@ -34,6 +35,9 @@ class PatientProcessorTest extends BaseProcessorTest {
 
     @Mock
     private PartnerHandler partnerHandler;
+
+    @Mock
+    private InsuranceCoverageHandler insuranceCoverageHandler;
 
     @InjectMocks
     private PatientProcessor patientProcessor;
