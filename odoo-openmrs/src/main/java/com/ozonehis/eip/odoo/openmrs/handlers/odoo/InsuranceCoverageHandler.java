@@ -71,8 +71,7 @@ public class InsuranceCoverageHandler {
         String tier = extractCoverageTier(patient);
         if (tier == null || tier.isBlank()) {
             throw new EIPException(String.format(
-                    "Patient %s is missing required %s person attribute",
-                    patient.getIdPart(), insuranceAttributeName));
+                    "Patient %s is missing required %s person attribute", patient.getIdPart(), insuranceAttributeName));
         }
         for (int percent : getTierSet()) {
             if (matchesTier(tier.trim(), percent)) {
@@ -81,8 +80,7 @@ public class InsuranceCoverageHandler {
             }
         }
         throw new EIPException(String.format(
-                "Unsupported %s value %s for patient %s",
-                insuranceAttributeName, tier, patient.getIdPart()));
+                "Unsupported %s value %s for patient %s", insuranceAttributeName, tier, patient.getIdPart()));
     }
 
     private boolean matchesTier(String tier, int percent) {
