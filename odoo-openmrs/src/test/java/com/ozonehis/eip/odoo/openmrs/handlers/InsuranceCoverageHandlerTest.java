@@ -120,6 +120,9 @@ class InsuranceCoverageHandlerTest {
     public void shouldCreatePlanAndCoverageForTierWhenAddonMirrorEnabled() {
         insuranceCoverageHandler.setInsuranceEnabled(true);
         insuranceCoverageHandler.setAddonEnabled(true);
+        insuranceCoverageHandler.setPlanRefPrefix("INS-");
+        insuranceCoverageHandler.setCoveredBaseMode("full");
+        insuranceCoverageHandler.setCoverageModel("insurance.product.coverage");
         Patient patient = patientWithTier("50%");
         Partner partner = new Partner();
         when(odooClient.searchAndRead(eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-50"))), any()))
@@ -172,6 +175,9 @@ class InsuranceCoverageHandlerTest {
     public void shouldNotDuplicatePlanOrCoverageWhenAddonMirrorEnabled() {
         insuranceCoverageHandler.setInsuranceEnabled(true);
         insuranceCoverageHandler.setAddonEnabled(true);
+        insuranceCoverageHandler.setPlanRefPrefix("INS-");
+        insuranceCoverageHandler.setCoveredBaseMode("full");
+        insuranceCoverageHandler.setCoverageModel("insurance.product.coverage");
         Patient patient = patientWithTier("100%");
         Partner partner = new Partner();
         when(odooClient.searchAndRead(eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-100"))), any()))
