@@ -146,18 +146,26 @@ class InsuranceCoverageHandlerTest {
                 .create(
                         eq("insurance.product.coverage"),
                         eq(List.of(Map.of(
-                                "insurance_id", 42,
-                                "product_id", 1,
-                                "coverage_percentage", 50.0,
-                                "covered_base_mode", "full"))));
+                                "insurance_id",
+                                42,
+                                "product_id",
+                                1,
+                                "coverage_percentage",
+                                50.0,
+                                "covered_base_mode",
+                                "full"))));
         verify(odooClient)
                 .create(
                         eq("insurance.product.coverage"),
                         eq(List.of(Map.of(
-                                "insurance_id", 42,
-                                "product_id", 2,
-                                "coverage_percentage", 50.0,
-                                "covered_base_mode", "full"))));
+                                "insurance_id",
+                                42,
+                                "product_id",
+                                2,
+                                "coverage_percentage",
+                                50.0,
+                                "covered_base_mode",
+                                "full"))));
     }
 
     @Test
@@ -166,8 +174,7 @@ class InsuranceCoverageHandlerTest {
         insuranceCoverageHandler.setAddonEnabled(true);
         Patient patient = patientWithTier("100%");
         Partner partner = new Partner();
-        when(odooClient.searchAndRead(
-                        eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-100"))), any()))
+        when(odooClient.searchAndRead(eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-100"))), any()))
                 .thenReturn(new Object[] {Map.of("id", 7, "name", "Insurance 100%")});
         when(odooClient.searchAndRead(eq("product.product"), any(), any()))
                 .thenReturn(new Object[] {Map.of("id", 1), Map.of("id", 2)});
@@ -184,10 +191,14 @@ class InsuranceCoverageHandlerTest {
                 .create(
                         eq("insurance.product.coverage"),
                         eq(List.of(Map.of(
-                                "insurance_id", 7,
-                                "product_id", 2,
-                                "coverage_percentage", 100.0,
-                                "covered_base_mode", "full"))));
+                                "insurance_id",
+                                7,
+                                "product_id",
+                                2,
+                                "coverage_percentage",
+                                100.0,
+                                "covered_base_mode",
+                                "full"))));
     }
 
     @Test
