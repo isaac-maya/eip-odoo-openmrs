@@ -11,6 +11,7 @@ import static java.util.Arrays.asList;
 
 import com.ozonehis.eip.odoo.openmrs.Constants;
 import com.ozonehis.eip.odoo.openmrs.client.OdooClient;
+import com.ozonehis.eip.odoo.openmrs.model.Partner;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
