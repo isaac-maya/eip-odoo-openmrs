@@ -10,6 +10,7 @@ package com.ozonehis.eip.odoo.openmrs.processors;
 import static org.openmrs.eip.fhir.Constants.HEADER_FHIR_EVENT_TYPE;
 
 import com.ozonehis.eip.odoo.openmrs.Constants;
+import com.ozonehis.eip.odoo.openmrs.handlers.odoo.InsuranceCoverageHandler;
 import com.ozonehis.eip.odoo.openmrs.handlers.odoo.PartnerHandler;
 import com.ozonehis.eip.odoo.openmrs.mapper.odoo.PartnerMapper;
 import com.ozonehis.eip.odoo.openmrs.model.Partner;
@@ -37,6 +38,9 @@ public class PatientProcessor implements Processor {
     @Autowired
     private PartnerHandler partnerHandler;
 
+    @Autowired
+    private InsuranceCoverageHandler insuranceCoverageHandler;
+
     @Override
     public void process(Exchange exchange) {
         try {
@@ -50,6 +54,9 @@ public class PatientProcessor implements Processor {
                 return;
             }
 
+            if (insuranceCoverageHandler.isEnabled()) {
+                insuranceCoverageHandler.validateCoverageTier(patient);
+            }
             String eventType = message.getHeader(HEADER_FHIR_EVENT_TYPE, String.class);
             Partner fetchedPartner = partnerHandler.getPartnerByID(partner.getPartnerRef());
             if (fetchedPartner != null) {
