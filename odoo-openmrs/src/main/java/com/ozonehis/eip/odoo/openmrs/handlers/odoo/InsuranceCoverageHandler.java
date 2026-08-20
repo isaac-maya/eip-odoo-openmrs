@@ -7,7 +7,15 @@
  */
 package com.ozonehis.eip.odoo.openmrs.handlers.odoo;
 
+import static java.util.Arrays.asList;
+
+import com.ozonehis.eip.odoo.openmrs.Constants;
+import com.ozonehis.eip.odoo.openmrs.client.OdooClient;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +24,7 @@ import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.Patient;
 import org.hl7.fhir.r4.model.Type;
 import org.openmrs.eip.EIPException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -47,6 +56,8 @@ public class InsuranceCoverageHandler {
     /** Returned by {@link #validateCoverageTier(Patient)} when the tier is missing and the missing-tier policy is {@code skip}. */
     private static final int NO_TIER = -1;
 
+    private static final String PRODUCT_MODEL = "product.product";
+
     @Value("${odoo.insurance.enabled:false}")
     private boolean insuranceEnabled;
 
@@ -62,8 +73,27 @@ public class InsuranceCoverageHandler {
     @Value("${odoo.insurance.missing.tier.policy:reject}")
     private String missingTierPolicy;
 
+    @Value("${odoo.insurance.addon.enabled:false}")
+    private boolean addonEnabled;
+
+    @Value("${odoo.insurance.plan.ref.prefix:INS-}")
+    private String planRefPrefix;
+
+    @Value("${odoo.insurance.covered.base.mode:full}")
+    private String coveredBaseMode;
+
+    @Value("${odoo.insurance.coverage.model:insurance.product.coverage}")
+    private String coverageModel;
+
+    @Autowired
+    private OdooClient odooClient;
+
     public boolean isEnabled() {
         return insuranceEnabled;
+    }
+
+    public boolean isAddonEnabled() {
+        return insuranceEnabled && addonEnabled;
     }
 
     /**
@@ -114,6 +144,105 @@ public class InsuranceCoverageHandler {
             tiers.add(Integer.parseInt(raw.trim()));
         }
         return tiers;
+    }
+
+    /**
+     * Mirrors the insurance tier into the insurance_coverage addon model (issue #184): find-or-create
+     * the base plan partner for the tier, enrol the patient in it and make sure every saleable product
+     * has a coverage row for the plan (coverage_percentage = tier, covered_base_mode = configured).
+     * The addon splits FULL-priced invoices between the payers, so this deliberately does not assign a
+     * discount pricelist to the partner. Idempotent by plan ref and the (insurance_id, product_id)
+     * unique constraint. No-op unless both the integration and the addon mirror are enabled.
+     */
+    public void applyAddonModelCoverage(Patient patient, Partner partner) {
+        if (!isAddonEnabled()) {
+            return;
+        }
+        int percent = validateCoverageTier(patient);
+        if (percent <= 0) {
+            // Missing tier with the skip policy: no plan, no enrolment, no coverage rows.
+            return;
+        }
+        String planName = String.format(planNameTemplate, percent);
+        String planRef = planRefPrefix + percent;
+        int planId = findOrCreateInsurancePlan(planName, planRef);
+        partner.setPartnerBaseInsuranceId(planId);
+        ensureCoverageRows(planId, percent);
+    }
+
+    private int findOrCreateInsurancePlan(String planName, String planRef) {
+        Object[] records = odooClient.searchAndRead(
+                Constants.PARTNER_MODEL, List.of(asList("ref", "=", planRef)), List.of("id", "name"));
+        if (records != null && records.length > 1) {
+            throw new EIPException(String.format("Multiple Odoo insurance plan partners exist with ref %s", planRef));
+        }
+        if (records != null && records.length == 1) {
+            Object id = ((Map<String, Object>) records[0]).get("id");
+            if (id == null) {
+                throw new EIPException(String.format("Odoo insurance plan partner %s has no id", planRef));
+            }
+            return Integer.parseInt(id.toString());
+        }
+        Integer planId = odooClient.create(
+                Constants.PARTNER_MODEL,
+                List.of(Map.of("name", planName, "ref", planRef, "is_insurance", true, "insurance_type", "base")));
+        if (planId == null || planId <= 0) {
+            throw new EIPException(
+                    String.format("Failed to create Odoo insurance plan partner %s (%s)", planName, planRef));
+        }
+        return planId;
+    }
+
+    private void ensureCoverageRows(int planId, int coveragePercentage) {
+        Object[] products = odooClient.searchAndRead(
+                PRODUCT_MODEL, List.of(asList("active", "=", true), asList("sale_ok", "=", true)), List.of("id"));
+        if (products == null || products.length == 0) {
+            return;
+        }
+        Object[] existing = odooClient.searchAndRead(
+                coverageModel, List.of(asList("insurance_id", "=", planId)), List.of("product_id"));
+        Set<Integer> coveredProductIds = new HashSet<>();
+        if (existing != null) {
+            for (Object record : existing) {
+                Object productId = ((Map<String, Object>) record).get("product_id");
+                if (productId != null) {
+                    coveredProductIds.add(asId(productId));
+                }
+            }
+        }
+        List<Map<String, Object>> coverageRows = new ArrayList<>();
+        for (Object productRecord : products) {
+            Object productId = ((Map<String, Object>) productRecord).get("id");
+            if (productId == null) {
+                continue;
+            }
+            int pid = asId(productId);
+            if (coveredProductIds.contains(pid)) {
+                continue;
+            }
+            coverageRows.add(Map.of(
+                    "insurance_id",
+                    planId,
+                    "product_id",
+                    pid,
+                    "coverage_percentage",
+                    (double) coveragePercentage,
+                    "covered_base_mode",
+                    coveredBaseMode));
+        }
+        for (Map<String, Object> row : coverageRows) {
+            Integer created = odooClient.create(coverageModel, List.of(row));
+            if (created == null || created <= 0) {
+                throw new EIPException(String.format("Failed to create coverage row for insurance plan %d", planId));
+            }
+        }
+    }
+
+    private int asId(Object value) {
+        if (value instanceof Object[] array) {
+            return Integer.parseInt(array[0].toString());
+        }
+        return Integer.parseInt(value.toString());
     }
 
     private String extractCoverageTier(Patient patient) {

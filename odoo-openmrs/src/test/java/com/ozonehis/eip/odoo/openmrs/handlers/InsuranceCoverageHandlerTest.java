@@ -11,11 +11,22 @@ import static java.util.Arrays.asList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.openMocks;
 
+import com.ozonehis.eip.odoo.openmrs.Constants;
+import com.ozonehis.eip.odoo.openmrs.client.OdooClient;
 import com.ozonehis.eip.odoo.openmrs.handlers.odoo.InsuranceCoverageHandler;
+import com.ozonehis.eip.odoo.openmrs.model.Partner;
 import java.util.List;
+import java.util.Map;
 import org.hl7.fhir.r4.model.CodeableConcept;
 import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.Patient;
@@ -24,6 +35,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.openmrs.eip.EIPException;
 
 class InsuranceCoverageHandlerTest {
@@ -32,6 +44,9 @@ class InsuranceCoverageHandlerTest {
 
     @InjectMocks
     private InsuranceCoverageHandler insuranceCoverageHandler;
+
+    @Mock
+    private OdooClient odooClient;
 
     private static AutoCloseable mocksCloser;
 
@@ -99,6 +114,109 @@ class InsuranceCoverageHandlerTest {
         insuranceCoverageHandler.setInsuranceEnabled(true);
         insuranceCoverageHandler.setPlanNameTemplate("Mutuelles %d%%");
         assertEquals(60, insuranceCoverageHandler.validateCoverageTier(patientWithTier("Mutuelles 60%")));
+    }
+
+    @Test
+    public void shouldCreatePlanAndCoverageForTierWhenAddonMirrorEnabled() {
+        insuranceCoverageHandler.setInsuranceEnabled(true);
+        insuranceCoverageHandler.setAddonEnabled(true);
+        Patient patient = patientWithTier("50%");
+        Partner partner = new Partner();
+        when(odooClient.searchAndRead(eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-50"))), any()))
+                .thenReturn(new Object[] {});
+        when(odooClient.searchAndRead(eq("product.product"), any(), any()))
+                .thenReturn(new Object[] {Map.of("id", 1), Map.of("id", 2)});
+        when(odooClient.searchAndRead(eq("insurance.product.coverage"), any(), any()))
+                .thenReturn(new Object[] {});
+        when(odooClient.create(eq(Constants.PARTNER_MODEL), any())).thenReturn(42);
+        when(odooClient.create(eq("insurance.product.coverage"), any())).thenReturn(1, 2);
+
+        insuranceCoverageHandler.applyAddonModelCoverage(patient, partner);
+
+        assertEquals(42, partner.getPartnerBaseInsuranceId());
+        verify(odooClient)
+                .create(
+                        eq(Constants.PARTNER_MODEL),
+                        eq(List.of(Map.of(
+                                "name", "Insurance 50%",
+                                "ref", "INS-50",
+                                "is_insurance", true,
+                                "insurance_type", "base"))));
+        verify(odooClient)
+                .create(
+                        eq("insurance.product.coverage"),
+                        eq(List.of(Map.of(
+                                "insurance_id", 42,
+                                "product_id", 1,
+                                "coverage_percentage", 50.0,
+                                "covered_base_mode", "full"))));
+        verify(odooClient)
+                .create(
+                        eq("insurance.product.coverage"),
+                        eq(List.of(Map.of(
+                                "insurance_id", 42,
+                                "product_id", 2,
+                                "coverage_percentage", 50.0,
+                                "covered_base_mode", "full"))));
+    }
+
+    @Test
+    public void shouldNotDuplicatePlanOrCoverageWhenAddonMirrorEnabled() {
+        insuranceCoverageHandler.setInsuranceEnabled(true);
+        insuranceCoverageHandler.setAddonEnabled(true);
+        Patient patient = patientWithTier("100%");
+        Partner partner = new Partner();
+        when(odooClient.searchAndRead(
+                        eq(Constants.PARTNER_MODEL), eq(List.of(asList("ref", "=", "INS-100"))), any()))
+                .thenReturn(new Object[] {Map.of("id", 7, "name", "Insurance 100%")});
+        when(odooClient.searchAndRead(eq("product.product"), any(), any()))
+                .thenReturn(new Object[] {Map.of("id", 1), Map.of("id", 2)});
+        when(odooClient.searchAndRead(eq("insurance.product.coverage"), any(), any()))
+                .thenReturn(new Object[] {Map.of("product_id", new Object[] {1, "P1"})});
+        when(odooClient.create(eq("insurance.product.coverage"), any())).thenReturn(3);
+
+        insuranceCoverageHandler.applyAddonModelCoverage(patient, partner);
+
+        assertEquals(7, partner.getPartnerBaseInsuranceId());
+        verify(odooClient, never()).create(eq(Constants.PARTNER_MODEL), any());
+        verify(odooClient, times(1)).create(eq("insurance.product.coverage"), any());
+        verify(odooClient)
+                .create(
+                        eq("insurance.product.coverage"),
+                        eq(List.of(Map.of(
+                                "insurance_id", 7,
+                                "product_id", 2,
+                                "coverage_percentage", 100.0,
+                                "covered_base_mode", "full"))));
+    }
+
+    @Test
+    public void shouldDoNothingWhenAddonMirrorDisabled() {
+        Patient patient = patientWithTier("50%");
+        Partner partner = new Partner();
+
+        insuranceCoverageHandler.applyAddonModelCoverage(patient, partner);
+
+        assertNull(partner.getPartnerBaseInsuranceId());
+        verify(odooClient, never()).searchAndRead(any(), any(), any());
+        verify(odooClient, never()).create(any(), any());
+    }
+
+    @Test
+    public void shouldNotMirrorWhenTierMissingAndPolicyIsSkip() {
+        insuranceCoverageHandler.setInsuranceEnabled(true);
+        insuranceCoverageHandler.setAddonEnabled(true);
+        insuranceCoverageHandler.setMissingTierPolicy("skip");
+        insuranceCoverageHandler.setPlanRefPrefix("INS-");
+        insuranceCoverageHandler.setCoveredBaseMode("full");
+        insuranceCoverageHandler.setCoverageModel("insurance.product.coverage");
+        Partner partner = new Partner();
+
+        insuranceCoverageHandler.applyAddonModelCoverage(patientWithTier(null), partner);
+
+        assertNull(partner.getPartnerBaseInsuranceId());
+        verify(odooClient, never()).searchAndRead(any(), any(), any());
+        verify(odooClient, never()).create(any(), any());
     }
 
     private Patient patientWithTier(String tier) {

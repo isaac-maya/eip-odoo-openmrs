@@ -215,4 +215,29 @@ class PatientProcessorTest extends BaseProcessorTest {
         // Assert
         verify(insuranceCoverageHandler, never()).validateCoverageTier(any());
     }
+
+    @Test
+    void shouldSkipInsuranceMirrorOnDeleteEvent() {
+        // Arrange
+        Patient patient = new Patient();
+        patient.setId(PATIENT_ID);
+        Partner partner = new Partner();
+        partner.setPartnerRef(PATIENT_ID);
+
+        Partner fetchedPartner = new Partner();
+        fetchedPartner.setPartnerId(12);
+
+        Exchange exchange = createExchange(patient, "d");
+
+        // Mock behavior
+        when(partnerMapper.toOdoo(patient)).thenReturn(partner);
+        when(partnerHandler.getPartnerByID(partner.getPartnerRef())).thenReturn(fetchedPartner);
+        when(insuranceCoverageHandler.isEnabled()).thenReturn(true);
+
+        // Act
+        patientProcessor.process(exchange);
+
+        // Assert
+        verify(insuranceCoverageHandler, never()).applyAddonModelCoverage(any(), any());
+    }
 }

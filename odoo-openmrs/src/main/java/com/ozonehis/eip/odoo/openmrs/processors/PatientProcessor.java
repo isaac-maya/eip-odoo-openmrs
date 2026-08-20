@@ -59,8 +59,11 @@ public class PatientProcessor implements Processor {
             // patient without the tier attribute can still be deleted from Odoo (a rejected
             // delete would leave a stale partner behind).
             boolean deleteEvent = !("c".equals(eventType) || "u".equals(eventType));
-            if (!deleteEvent && insuranceCoverageHandler.isEnabled()) {
-                insuranceCoverageHandler.validateCoverageTier(patient);
+            if (!deleteEvent) {
+                if (insuranceCoverageHandler.isEnabled()) {
+                    insuranceCoverageHandler.validateCoverageTier(patient);
+                }
+                insuranceCoverageHandler.applyAddonModelCoverage(patient, partner);
             }
             Partner fetchedPartner = partnerHandler.getPartnerByID(partner.getPartnerRef());
             if (fetchedPartner != null) {
