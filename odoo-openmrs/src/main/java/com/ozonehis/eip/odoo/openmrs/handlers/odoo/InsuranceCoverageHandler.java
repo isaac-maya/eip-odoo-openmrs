@@ -153,7 +153,9 @@ public class InsuranceCoverageHandler {
      * has a coverage row for the plan (coverage_percentage = tier, covered_base_mode = configured).
      * The addon splits FULL-priced invoices between the payers, so this deliberately does not assign a
      * discount pricelist to the partner. Idempotent by plan ref and the (insurance_id, product_id)
-     * unique constraint. No-op unless both the integration and the addon mirror are enabled.
+     * unique constraint, so calling it on BOTH the plain patient sync and the order-driven
+     * (createOrUpdatePartner) path is safe — the second call re-ensures the same plan/coverage rows.
+     * No-op unless both the integration and the addon mirror are enabled.
      */
     public void applyAddonModelCoverage(Patient patient, Partner partner) {
         if (!isAddonEnabled()) {

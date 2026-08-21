@@ -86,6 +86,7 @@ class PatientProcessorTest extends BaseProcessorTest {
         // Assert
         assertEquals(exchange.getMessage().getHeader(HEADER_FHIR_EVENT_TYPE), "c");
         verify(partnerMapper, times(1)).toOdoo(patient);
+        verify(insuranceCoverageHandler).applyAddonModelCoverage(eq(patient), any());
     }
 
     @Test
