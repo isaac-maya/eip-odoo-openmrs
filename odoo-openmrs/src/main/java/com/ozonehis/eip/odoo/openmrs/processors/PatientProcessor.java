@@ -54,10 +54,14 @@ public class PatientProcessor implements Processor {
                 return;
             }
 
-            if (insuranceCoverageHandler.isEnabled()) {
+            String eventType = message.getHeader(HEADER_FHIR_EVENT_TYPE, String.class);
+            // Delete events carry no billable insurance state: skip tier validation so a
+            // patient without the tier attribute can still be deleted from Odoo (a rejected
+            // delete would leave a stale partner behind).
+            boolean deleteEvent = !("c".equals(eventType) || "u".equals(eventType));
+            if (!deleteEvent && insuranceCoverageHandler.isEnabled()) {
                 insuranceCoverageHandler.validateCoverageTier(patient);
             }
-            String eventType = message.getHeader(HEADER_FHIR_EVENT_TYPE, String.class);
             Partner fetchedPartner = partnerHandler.getPartnerByID(partner.getPartnerRef());
             if (fetchedPartner != null) {
                 partner.setPartnerId(fetchedPartner.getPartnerId());

@@ -78,6 +78,15 @@ class InsuranceCoverageHandlerTest {
     }
 
     @Test
+    public void shouldSkipValidationWhenTierMissingAndPolicyIsSkip() {
+        insuranceCoverageHandler.setInsuranceEnabled(true);
+        insuranceCoverageHandler.setMissingTierPolicy("skip");
+
+        assertEquals(-1, insuranceCoverageHandler.validateCoverageTier(patientWithTier(null)));
+        assertEquals(-1, insuranceCoverageHandler.validateCoverageTier(patientWithTier("   ")));
+    }
+
+    @Test
     public void shouldHonorCustomTierSet() {
         insuranceCoverageHandler.setInsuranceEnabled(true);
         insuranceCoverageHandler.setConfiguredTiers("25,50,75,100");
