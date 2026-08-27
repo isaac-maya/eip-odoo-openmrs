@@ -42,6 +42,11 @@ public class InsuranceCoverageHandler {
     private static final String PERSON_ATTRIBUTE_TYPE_URL = "http://fhir.openmrs.org/ext/person-attribute-type";
     private static final String PERSON_ATTRIBUTE_VALUE_URL = "http://fhir.openmrs.org/ext/person-attribute-value";
 
+    private static final String MISSING_TIER_POLICY_SKIP = "skip";
+
+    /** Returned by {@link #validateCoverageTier(Patient)} when the tier is missing and the missing-tier policy is {@code skip}. */
+    private static final int NO_TIER = -1;
+
     @Value("${odoo.insurance.enabled:false}")
     private boolean insuranceEnabled;
 
@@ -54,13 +59,19 @@ public class InsuranceCoverageHandler {
     @Value("${odoo.insurance.plan.name.template:Insurance %d%%}")
     private String planNameTemplate;
 
+    @Value("${odoo.insurance.missing.tier.policy:reject}")
+    private String missingTierPolicy;
+
     public boolean isEnabled() {
         return insuranceEnabled;
     }
 
     /**
-     * Fail-closed validation of the insurance coverage tier (issue #189): a patient without the
-     * configured person attribute, or with a value outside the configured tier set, is rejected.
+     * Fail-closed validation of the insurance coverage tier (issue #189): a patient with a value
+     * outside the configured tier set is rejected. A patient WITHOUT the attribute is rejected by
+     * default (policy {@code reject}); with {@code odoo.insurance.missing.tier.policy=skip} the
+     * patient is instead treated as uninsured and {@code -1} is returned, so the sync proceeds
+     * without insurance processing (legacy patients predating the attribute keep working).
      * Callers must gate on {@link #isEnabled()} — when the integration is disabled this method
      * throws, it never silently accepts.
      */
@@ -70,6 +81,14 @@ public class InsuranceCoverageHandler {
         }
         String tier = extractCoverageTier(patient);
         if (tier == null || tier.isBlank()) {
+            if (MISSING_TIER_POLICY_SKIP.equalsIgnoreCase(missingTierPolicy)) {
+                log.warn(
+                        "Patient {} is missing required {} person attribute; treating as uninsured "
+                                + "(missing-tier policy=skip)",
+                        patient.getIdPart(),
+                        insuranceAttributeName);
+                return NO_TIER;
+            }
             throw new EIPException(String.format(
                     "Patient %s is missing required %s person attribute", patient.getIdPart(), insuranceAttributeName));
         }
